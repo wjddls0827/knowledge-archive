@@ -9,13 +9,19 @@
 
 ## 스크린샷
 
-| 갤러리 — 수집 목록 | 캘린더 — 채용공고는 마감일, 그 외는 수집일 |
+### 🏠 홈 — 갤러리 (수집 목록)
+
+![홈 · 갤러리](docs/screenshots/gallery.jpg)
+
+| 🏠 홈 — 캘린더 (채용공고=마감일, 그 외=수집일) | 🏠 홈 — 리스트 (분류·출처·상태·키워드) |
 | :---: | :---: |
-| ![갤러리](docs/screenshots/gallery.jpg) | ![캘린더](docs/screenshots/calendar.jpg) |
-| **읽기 뷰 — 원문 캡처 + 요약** | **나란히 보기 — 원문 ↔ 한국어 번역** |
-| ![읽기 뷰](docs/screenshots/reader.jpg) | ![나란히 보기](docs/screenshots/translate.jpg) |
-| **리스트 — 분류·출처·상태·키워드** | **수집 — 링크/파일 투입 → Claude Code 대행** |
-| ![리스트](docs/screenshots/list.jpg) | ![수집 팝업](docs/screenshots/add.jpg) |
+| ![홈 · 캘린더](docs/screenshots/calendar.jpg) | ![홈 · 리스트](docs/screenshots/list.jpg) |
+| **📄 상세 — 읽기 (원문 캡처 + 요약)** | **📄 상세 — 나란히 보기 (원문 ↔ 한국어 번역)** |
+| ![상세 · 읽기](docs/screenshots/reader.jpg) | ![상세 · 나란히 번역](docs/screenshots/translate.jpg) |
+
+### 🏠 홈 — 수집 (＋ 아카이빙 시작 → Claude Code 대행)
+
+![홈 · 수집 팝업](docs/screenshots/add.jpg)
 
 ## 동작 방식 (구조 B)
 
