@@ -953,6 +953,7 @@
     <div class="fsbar"><span class="rtlbl" id="fstitle">원문 전체보기</span><span style="flex:1"></span><span id="fszoomctl"><button class="zbtn" id="fsout" title="축소">−</button><span class="zlabel" id="fszlbl">100%</span><button class="zbtn" id="fsin" title="확대">＋</button><button class="zbtn" id="fsfit" title="원래대로(100%)">100%</button></span><button class="zbtn mmdx" id="fsclose" title="닫기 (Esc)">✕</button></div>
     <div class="fsbody" id="fsbody"></div>
   </div>
+<script src="/js/util.js"></script>
 <script>
 const $=s=>document.querySelector(s);
 const ICONS={
@@ -988,7 +989,7 @@ const BRAND_ICONS={
 const BRAND_DOMAINS=[['github.com','github'],['x.com','x'],['twitter.com','x'],['instagram.com','instagram'],['youtube.com','youtube'],['youtu.be','youtube'],['reddit.com','reddit'],['news.ycombinator.com','ycombinator'],['linkedin.com','linkedin'],['threads.com','threads'],['threads.net','threads'],['arxiv.org','arxiv'],['medium.com','medium'],['vimeo.com','vimeo']];
 function brandSlug(i){ const u=(((i.source||{}).url)||'').toLowerCase(); if(!u)return null; for(const [dom,slug] of BRAND_DOMAINS){ if(u.includes(dom)) return slug; } return null; }
 function brandSvg(slug){ const b=BRAND_ICONS[slug]; if(!b)return ''; return `<svg class="ic bic" viewBox="0 0 24 24" fill="currentColor" style="color:${b.c}" aria-hidden="true"><path d="${b.d}"/></svg>`; }
-function hostOf(u){ try{ return new URL(u).hostname.replace(/^www\./,''); }catch(e){ return ''; } }
+/* hostOf → js/util.js */
 // 파비콘 로드 실패 → data-fb(인코딩된 기본 아이콘 svg)로 되돌림
 function icoFb(img){ try{ const w=document.createElement('span'); w.innerHTML=decodeURIComponent(img.getAttribute('data-fb')||''); const n=w.firstElementChild; if(n) img.replaceWith(n); else img.remove(); }catch(e){ try{img.style.display='none';}catch(_){ } } }
 // 알려진 브랜드면 실사 로고, 아니면 그 사이트 파비콘(서버 캐시), 그것도 없으면 기본 포맷 아이콘
@@ -1043,9 +1044,7 @@ const PAGE=24;
 // 분류(메인 축) = 문서 타입(kind). MECE 11종. 성격(트렌드/관점) 축·'추정' 배지는 폐기.
 const KINDS={paper:'논문·리포트',news:'뉴스',article:'아티클·블로그',jd:'채용공고',social:'소셜',forum:'포럼·토론',video:'영상',slide:'슬라이드·자료',visual:'슬라이드·자료',repo:'코드·레포',book:'도서',doc:'기타'};
 const KIND_ORDER=['paper','news','article','jd','social','forum','video','visual','repo','book','doc'];
-// 같은 '채용공고'를 가리키는 변형 kind를 정본 'jd'로 정규화(수집기가 recruit/job 등으로 넣어도 한 종류로 묶임)
-const KIND_ALIAS={recruit:'jd',recruiting:'jd',job:'jd',jobs:'jd',jobposting:'jd','job-posting':'jd',posting:'jd',jobpost:'jd',hiring:'jd',career:'jd',careers:'jd',채용:'jd',채용공고:'jd'};
-function kindKey(i){const k=(i.kind||'').toLowerCase();return KIND_ALIAS[k]||k;}
+/* KIND_ALIAS·kindKey → js/util.js */
 function kindLabel(i){const k=kindKey(i);return k?(KINDS[k]||k):'기타';}
 
 function _today0(){const d=new Date();d.setHours(0,0,0,0);return d.getTime();}  // 오늘 자정(ms)
@@ -1113,7 +1112,7 @@ function attImgUrl(i){
   if(!im) return null;
   return `/api/materials/${i.id}/${(im.path||'').split('/').map(encodeURIComponent).join('/')}`;
 }
-function shortUrl(u){try{return new URL(u).hostname.replace(/^www\./,'');}catch(e){return u;}}
+/* shortUrl → js/util.js */
 function stepper(status){
   const cur=STEP_IDX[status]??0;
   return `<div class="step">`+STEPS.map((s,x)=>{
@@ -1520,11 +1519,9 @@ function homeGallery(list){
     </button>`;}).join('')}</div>`;
 }
 // 캘린더 표기 기준 날짜: 채용공고(JD)+마감일(날짜)이면 '마감일', 상시/없음/비JD면 수집일(created_at)
-function isDateStr(s){ return /^\d{4}-\d{2}-\d{2}$/.test(s||''); }
+/* isDateStr → js/util.js */
 function calDate(i){ const dl=((i.extensions||{}).deadline||'').slice(0,10); return (kindKey(i)==='jd'&&isDateStr(dl))?dl:(i.created_at||'').slice(0,10); }
-function ddayNum(ds){ try{ const t=new Date(); const today=new Date(t.getFullYear(),t.getMonth(),t.getDate()); const[y,m,d]=ds.split('-').map(Number); return Math.round((new Date(y,m-1,d)-today)/86400000); }catch(e){ return 999; } }
-function ddayStr(ds){ const n=ddayNum(ds); return n===0?'D-DAY':n>0?('D-'+n):('D+'+(-n)); }
-function fmtDs(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
+/* ddayNum·ddayStr·fmtDs → js/util.js */
 // 채용공고 마감 상태 → 배지 {k:클래스, label:글자}. 날짜 지남=자동 '종료', '마감'=수동 종료
 function jdStat(i){
   const raw=((i.extensions||{}).deadline||'');
@@ -2526,7 +2523,7 @@ document.addEventListener('drop',e=>{
 let _gDrag=false,_gSV=null;
 document.addEventListener('mousemove',e=>{if(!_gDrag||!_gSV)return;const r=_gSV.getBoundingClientRect();let left=Math.max(220,Math.min(r.width-220,e.clientX-r.left));_gSV.style.gridTemplateColumns=left+'px 6px 1fr';});
 document.addEventListener('mouseup',()=>{if(_gDrag){_gDrag=false;document.body.style.userSelect='';}});
-function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+/* esc → js/util.js */
 document.querySelector('.brand').onclick=()=>go(null);
 {const rch=document.getElementById('railcollapse'); if(rch)rch.onclick=toggleRail; const rop=document.getElementById('railopen'); if(rop)rop.onclick=toggleRail;}
 // ── 수집 진행 상황판(경량): /api/jobs 를 폴링해 "수집 중"을 표시. LLM 토큰 안 씀(로컬 HTTP만). ──

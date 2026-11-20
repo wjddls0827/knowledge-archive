@@ -115,6 +115,16 @@ def index() -> str:
     return (WEB_DIR / "index.html").read_text(encoding="utf-8")
 
 
+@app.get("/js/{fname}")
+def get_js(fname: str) -> FileResponse:
+    """web/js/*.js 정적 서빙 — index.html에서 분리한 프런트 모듈 로드용(파일명 소독, .js만)."""
+    safe = re.sub(r"[^A-Za-z0-9_.-]", "", fname)
+    f = WEB_DIR / "js" / safe
+    if not safe.endswith(".js") or not f.is_file():
+        raise HTTPException(404, "not found")
+    return FileResponse(str(f), media_type="application/javascript")
+
+
 @app.get("/api/materials")
 def list_materials() -> JSONResponse:
     items = sorted(_repo.iter_all(), key=lambda i: i.created_at, reverse=True)
