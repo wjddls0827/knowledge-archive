@@ -10,7 +10,6 @@ import mimetypes
 import os
 import re
 import shutil
-import ssl
 import subprocess
 import sys
 from pathlib import Path
@@ -553,14 +552,6 @@ def get_attachment(item_id: str, rel_path: str) -> FileResponse:
 
 
 # ── 자주 가는 사이트(바로가기) ────────────────────────────────────────
-def _sites_ctx() -> ssl.SSLContext:
-    try:
-        import certifi
-        return ssl.create_default_context(cafile=certifi.where())
-    except Exception:
-        return ssl.create_default_context()
-
-
 def _load_sites() -> list:
     try:
         d = json.loads(SITES_FILE.read_text(encoding="utf-8"))
