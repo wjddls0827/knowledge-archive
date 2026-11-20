@@ -24,9 +24,11 @@ from pydantic import BaseModel
 
 from ..application.archive_service import ArchiveService
 from ..domain.ports import ItemNotFound
+from ..infra.deadline import normalize_deadline
 from ..infra.fs_repository import FsItemRepository
 from ..infra.registry import SimpleTypeRegistry
 from ..infra.workspace import FsWorkspace
+from ..prompts import load_prompt
 
 SERVER_DIR = Path(__file__).resolve().parents[2]
 ARCHIVE_ROOT = Path(os.environ.get("AHK_ARCHIVE", SERVER_DIR / "data" / "archive"))
@@ -216,19 +218,11 @@ def edit_material(item_id: str, body: EditIn) -> JSONResponse:
     if body.provenance is not None:
         item.extensions["provenance"] = body.provenance
     if body.deadline is not None:
-        dl = (body.deadline or "").strip()
-        if not dl:
-            item.extensions.pop("deadline", None)
-        elif re.fullmatch(r"\s*(마감|종료|마감됨|closed)\s*", dl, re.I):
-            item.extensions["deadline"] = "마감"          # 수동 종료(상시 공고 마감 등)
-        elif re.search(r"상시|수시|채용\s*시|마감\s*시|rolling|until\s*filled", dl, re.I):
-            item.extensions["deadline"] = "상시"
+        val = normalize_deadline(body.deadline)  # 'YYYY-MM-DD' | '상시' | '마감' | None (공용: infra/deadline.py)
+        if val:
+            item.extensions["deadline"] = val
         else:
-            m = re.search(r"\d{4}-\d{2}-\d{2}", dl)
-            if m:
-                item.extensions["deadline"] = m.group(0)
-            else:
-                item.extensions.pop("deadline", None)
+            item.extensions.pop("deadline", None)
     if body.interpretation is not None:
         item.extensions["interpretation"] = body.interpretation
     if body.translation is not None:
@@ -302,39 +296,12 @@ def collect(body: CollectIn) -> JSONResponse:
         "(예: '본문 가져오는 중' → '번역 중 (3/10)' → '요약·정리 중' → '저장 중'). "
     )
     if iid:
-        prompt = (
-            f"AH!chiving: 이미 보관된 자료 id={iid} 를 번역·보강해줘. "
-            f"본문은 `curl -s http://127.0.0.1:8800/api/materials/{iid}` 의 extensions.text(없으면 original_files 원문을 직접 읽어). "
-            "자연스러운 한국어 번역(문단 유지) + 요약(아래 HTML 포맷) + 키워드 5개를 만들어 임시 payload.json(키: translation, summary, tags)에 쓰고 "
-            "summary는 '핵심→근거→함의' 구조의 HTML로: <p><b>한 줄 요약</b><br>…</p><p><b>핵심 포인트</b></p><ul><li>…</li>(2~4개)</ul><p><b>왜 중요한가</b><br>…</p>. "
-            f"`curl -s -X PATCH http://127.0.0.1:8800/api/materials/{iid} -H \"Content-Type: application/json\" --data-binary @payload.json` 로 저장해줘. "
-            "이미지 자료면 원문을 보고 내용 설명을 만들어. "
-            f"본문 안에 원문 출처·참고/영상 링크가 있으면 각 링크를 `curl -s -X POST http://127.0.0.1:8800/api/materials/{iid}/attachments/link -H \"Content-Type: application/json\" --data-binary '{{\"url\":\"...\",\"title\":\"표시명\"}}'` 로 첨부에 추가해(사용자가 올린 기존 첨부는 보존·append). "
-            "원문의 제목 위계는 markdown 헤딩(#·##·###), 목록은 '- ' 불릿으로 보존하고, 도식·차트가 있으면 mermaid/markdown 표로 재구성해 번역에 포함. "
-            "원문↔번역 나란히 정렬을 위해 'segments'(원문 문단과 그 번역을 쌍으로: [{\"o\":원문문단,\"k\":번역문단}, …], 문단 수·순서 일치)도 함께 넣어줘. "
-            "수집 경위·판단(번역 생략 이유, 날짜 추정 근거, 댓글 수집 통계 등)은 payload의 'provenance' 키에 적어. "
-            "'notes'(메모)는 사용자 전용이라 절대 쓰지 마(비워 둬). "
-            + stage_hint
-        )
+        # 프롬프트 본문은 외부화: ahkaiving/prompts/collect_enrich.md ({{IID}}·{{STAGE_HINT}} 치환)
+        prompt = load_prompt("collect_enrich.md", IID=iid, STAGE_HINT=stage_hint)
         title = "AH!chiving 보강"
     else:
-        prompt = (
-            "AH!chiving 아카이빙 수집 작업이야. 아래 링크를 WebFetch로 가져와서 "
-            "원문 본문 추출 + 자연스러운 한국어 번역(문단 구분 유지) + 요약(아래 HTML 포맷) + 키워드 5개 + 저자/발행일을 만들고, "
-            "summary는 '핵심→근거→함의' 구조의 HTML로: <p><b>한 줄 요약</b><br>…</p><p><b>핵심 포인트</b></p><ul><li>…</li>(2~4개)</ul><p><b>왜 중요한가</b><br>…</p>. "
-            "원문의 제목·소제목 위계는 markdown 헤딩(#·##·###), 목록은 '- ' 불릿으로 text·translation에 보존해(대시보드가 렌더). "
-            "원문에 도식·차트·표가 있으면 비워두지 말고 mermaid 코드블록(```mermaid```)이나 markdown 표로 재구성해 해당 위치에 포함. "
-            "그리고 페이지 **전체(스크롤 끝까지, full-page) 스크린샷**을 떠서 — 한 화면(뷰포트)만 찍지 말고 문서 전체 높이를 한 장에 담아 — 이미지 파일로 저장하고 payload의 'thumbnail'(그 파일경로)로 넘겨(원문 캡처·썸네일 공용). 전체 캡처가 안 되는 도구면 가능한 한 길게(여러 번 찍어 세로로 이어 붙여도 좋음). "
-            "payload를 임시 JSON 파일로 써서 `python -m ahkaiving.cli ingest <그_json경로>` 로 보관해줘. "
-            "payload 필드/예시는 ahkaiving/cli.py 상단 독스트링 참고(url,title,kind,authors,published_at,text,translation,summary,tags). "
-            "이게 **채용공고(JD)**면 kind='jd' 로 하고, 지원 **마감일**을 payload 'deadline' 로 꼭 넣어줘 — 공고에 마감 날짜가 조금이라도 적혀 있으면 **반드시 그 날짜를 'YYYY-MM-DD'로**(예: '~11/20', '11월 20일 마감', 'D-7' → 실제 날짜로 환산). 공고에 '상시채용·수시채용·채용 시 마감'이라고 **명시된 경우에만** '상시'. 날짜도 없고 상시도 아니면 넣지 마 — 날짜를 못 찾았다고 섣불리 '상시'로 적지 말 것. "
-            "본문 안에 '원문 출처 링크'나 따로 첨부된 영상·파일 링크가 있으면 payload의 'attachments'=[{\"kind\":\"link\"|\"video\",\"name\":표시명,\"url\":주소}] 에 넣어줘(첨부 탭에 북마크 카드·영상 미리보기로 뜸). 광고·내비·추천 말고 본문이 실제로 가리키는 원문/참고 링크만. "
-            "원문↔번역 나란히 정렬을 위해 'segments'(원문 문단과 그 번역을 쌍으로: [{\"o\":원문문단,\"k\":번역문단}, …], 문단 수·순서 일치)도 함께 넣어줘. "
-            "수집 경위·판단(번역 생략 이유, 날짜 추정 근거, 댓글 수집 통계 등)은 payload의 'provenance' 키에 적어. "
-            "'notes'(메모)는 사용자 전용이라 절대 쓰지 마(비워 둬). "
-            + stage_hint +
-            "로그인/봇차단으로 본문을 못 가져오면 브라우저 도구로 끝까지 받아줘. 링크: " + url
-        )
+        # 프롬프트 본문은 외부화: ahkaiving/prompts/collect_new.md ({{STAGE_HINT}}·{{URL}} 치환)
+        prompt = load_prompt("collect_new.md", STAGE_HINT=stage_hint, URL=url)
         title = "AH!chiving 수집"
     # 수집 1건 = 창 1개. 각 수집을 전용 콘솔에서 claude 1회로 독립 실행 → 다건이 병렬로 진행된다.
     # 창끼리 공유 큐가 없어 '하나만 수집됨'/stuck 같은 레이스가 구조적으로 없다. 창을 닫으면 그 수집만 멈춘다.

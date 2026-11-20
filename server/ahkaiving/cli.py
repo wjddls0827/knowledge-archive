@@ -10,7 +10,7 @@ API 키가 필요 없다 — 번역/요약은 에이전트가 이미 만들어 p
   python -m ahkaiving.cli ingest -                  # stdin 으로 payload JSON
   python -m ahkaiving.cli list                       # 보관 자료 목록(점검용)
 
-payload(JSON) 필드 — 전부 선택이지만 url 또는 original_file 중 하나는 권장:
+payload(JSON) 필드 — 스키마 정본·검증은 ahkaiving/domain/payload.py. 전부 선택이지만 url 또는 original_file 권장:
   url            출처 URL
   kind           매체 유형(article/news/paper/social/forum/video/repo/...) — 없으면 URL로 추정. 꼬리표·뷰어용
   category       내용 분류(메인 축): trend(트렌드)·concept(기본개념)·case(사례)·opinion(관점)
@@ -57,6 +57,8 @@ from .domain.model import (
     Kind,
     SourceRef,
 )
+from .domain.payload import validate_payload
+from .infra.deadline import normalize_deadline
 from .infra.fs_repository import FsItemRepository
 from .infra.registry import SimpleTypeRegistry
 from .infra.workspace import FsWorkspace
@@ -82,6 +84,14 @@ def _load_payload(arg: str) -> dict:
 
 def cmd_ingest(arg: str) -> int:
     p = _load_payload(arg)
+    # 에이전트 계약 검증 — 필드명 오타(경고)·구조 위반(중단)을 조용히 넘기지 않는다.
+    errors, warnings = validate_payload(p)
+    for w in warnings:
+        print(f"⚠ {w}")
+    if errors:
+        for e in errors:
+            print(f"✗ {e}")
+        raise SystemExit("payload 계약 위반 — 저장을 중단했어요. (스키마 정본: ahkaiving/domain/payload.py)")
     url = (p.get("url") or "").strip() or None
     registry = SimpleTypeRegistry()
 
@@ -208,15 +218,9 @@ def cmd_ingest(arg: str) -> int:
             item.extensions["notes"] = p["notes"]            # 사용자 전용 메모(에이전트는 쓰지 않음)
         if p.get("provenance"):
             item.extensions["provenance"] = p["provenance"]  # 수집 경위(에이전트 자동 메모)
-        _dl = str(p.get("deadline") or "").strip()  # 마감일(JD) — 날짜 또는 '상시'
+        _dl = normalize_deadline(p.get("deadline"))  # 'YYYY-MM-DD' | '상시' | '마감' | None
         if _dl:
-            import re as _re_dl
-            if _re_dl.search(r"상시|수시|채용\s*시|마감\s*시|rolling|until\s*filled", _dl, _re_dl.I):
-                item.extensions["deadline"] = "상시"
-            else:
-                _m_dl = _re_dl.search(r"\d{4}-\d{2}-\d{2}", _dl)
-                if _m_dl:
-                    item.extensions["deadline"] = _m_dl.group(0)
+            item.extensions["deadline"] = _dl
         if p.get("glossary"):
             item.extensions["glossary"] = [
                 {"term": g.get("term", ""), "meaning": g.get("meaning", "")}

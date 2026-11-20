@@ -20,7 +20,7 @@
   python -m ahkaiving.cli ingest -                # stdin 으로 payload JSON
   python -m ahkaiving.cli list                    # 보관 목록 점검
   ```
-  payload 필드 정의는 `ahkaiving/cli.py` 상단 독스트링(정본).
+  payload 스키마 정본·검증은 `ahkaiving/domain/payload.py`(cli 가 ingest 시 이걸로 검증 — 필드 오타·구조 위반을 조용히 넘기지 않음).
 - **테스트**: `cd server && python -m unittest discover -s tests -v` (설치 없이 도는 표준 unittest).
 
 ## 아키텍처 (헥사고날 / 포트-어댑터)
