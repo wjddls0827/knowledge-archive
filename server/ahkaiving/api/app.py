@@ -26,7 +26,14 @@ from ..application.archive_service import ArchiveService
 from ..domain.ports import ItemNotFound
 from ..infra.deadline import normalize_deadline
 from ..infra.fs_repository import FsItemRepository
+from ..infra.jobs import prune_jobs as _prune_jobs_impl
 from ..infra.registry import SimpleTypeRegistry
+from ..infra.site_meta import download_icon as _dl_icon
+from ..infra.site_meta import fetch_site_meta as _fetch_meta
+from ..infra.sites_store import find_site_node as _find_node
+from ..infra.sites_store import iter_site_dicts as _iter_dicts
+from ..infra.sites_store import safe_icon as _safe_icon_impl
+from ..infra.sites_store import san_node as _san_impl
 from ..infra.workspace import FsWorkspace
 from ..prompts import load_prompt
 
@@ -56,43 +63,8 @@ _JOB_TTL = 900  # 초. 15분 지나면 자동 소멸(창을 닫았거나 실패�
 
 
 def _prune_jobs() -> None:
-    import time
-    from ..domain.model import SourceRef as _SR
-    now = time.time()
-    beats = SERVER_DIR / "data" / "collect_beats"
-
-    def _beat_fresh(jid: str) -> bool:
-        # 각 수집 창(러너)이 자기 beat 파일에 현재 시각을 계속 쓴다. 최근이면 그 창이 살아서 수집 중.
-        bp = beats / jid
-        try:
-            return bp.exists() and (now - float((bp.read_text(encoding="utf-8").strip() or "0"))) < 25
-        except Exception:
-            return False
-
-    for jid in list(_JOBS):
-        j = _JOBS[jid]
-        if now - j["started"] > _JOB_TTL:
-            _JOBS.pop(jid, None)
-            continue
-        # 새 URL 수집: 같은 URL 자료가 생겼으면 완료로 보고 치운다.
-        if j.get("url") and _repo.find_by_source(_SR(url=j["url"])) is not None:
-            _JOBS.pop(jid, None)
-            continue
-        # 이 수집 창이 죽었으면(창을 닫았거나 끝나 종료) 해당 잡만 정리. spawn 직후 몇 초는 유예(오탐 방지).
-        if now - j["started"] > 12 and not _beat_fresh(jid):
-            _JOBS.pop(jid, None)
-    # 창이 강제 종료돼 러너가 못 지운 고아 작업·beat 파일 정리(살아있는 창 것은 건드리지 않음).
-    try:
-        inbox = SERVER_DIR / "data" / "collect_inbox"
-        for f in inbox.glob("*.json"):
-            if f.stem not in _JOBS and now - f.stat().st_mtime > 30 and not _beat_fresh(f.stem):
-                f.unlink()
-        if beats.exists():
-            for f in beats.iterdir():
-                if f.name not in _JOBS and not _beat_fresh(f.name) and now - f.stat().st_mtime > 30:
-                    f.unlink()
-    except Exception:
-        pass
+    """만료·죽은 창·고아 파일 정리 — infra/jobs.prune_jobs 로 위임(상태판 _JOBS·의존성 주입, 동작 동일)."""
+    _prune_jobs_impl(_JOBS, SERVER_DIR, _repo, _JOB_TTL)
 
 
 @app.get("/api/jobs")
@@ -607,48 +579,13 @@ def _save_sites(sites: list) -> None:
 
 
 def _fetch_site_meta(url: str):
-    """사이트 HTML을 best-effort로 받아 <title>과 favicon 절대 URL을 뽑는다."""
-    title, icon_url = "", ""
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (AH!kaiving)"})
-        with urllib.request.urlopen(req, timeout=10, context=_sites_ctx()) as resp:
-            html = resp.read(500_000).decode("utf-8", "ignore")
-        m = re.search(r"<title[^>]*>(.*?)</title>", html, re.I | re.S)
-        if m:
-            title = re.sub(r"\s+", " ", m.group(1)).strip()[:120]
-        for lm in re.finditer(r"<link[^>]+>", html, re.I):
-            tag = lm.group(0)
-            if re.search(r'rel=["\'][^"\']*icon', tag, re.I):
-                hm = re.search(r'href=["\']([^"\']+)["\']', tag, re.I)
-                if hm:
-                    icon_url = urljoin(url, hm.group(1))
-                    break
-    except Exception:
-        pass
-    if not icon_url:
-        p = urlparse(url)
-        icon_url = f"{p.scheme}://{p.netloc}/favicon.ico"
-    return title, icon_url
+    """사이트 <title>·favicon URL 추출 — infra/site_meta.fetch_site_meta 로 위임(동작 동일)."""
+    return _fetch_meta(url)
 
 
 def _download_icon(icon_url: str, base: str, dest: Path | None = None) -> str:
-    try:
-        req = urllib.request.Request(icon_url, headers={"User-Agent": "Mozilla/5.0 (AH!kaiving)"})
-        with urllib.request.urlopen(req, timeout=10, context=_sites_ctx()) as resp:
-            ctype = (resp.headers.get("Content-Type") or "").lower()
-            data = resp.read(2_000_000)
-        if not data:
-            return ""
-        low = icon_url.lower()
-        ext = (".svg" if "svg" in ctype else ".ico" if ("icon" in ctype or low.endswith(".ico"))
-               else ".jpg" if "jpeg" in ctype else ".gif" if "gif" in ctype
-               else ".webp" if "webp" in ctype else ".png")
-        d = dest or SITES_ICONS
-        d.mkdir(parents=True, exist_ok=True)
-        (d / f"{base}{ext}").write_bytes(data)
-        return f"{base}{ext}"
-    except Exception:
-        return ""
+    """아이콘 받아 저장 — infra/site_meta.download_icon 로 위임. dest 기본값은 SITES_ICONS."""
+    return _dl_icon(icon_url, base, dest or SITES_ICONS)
 
 
 @app.get("/api/favicon")
@@ -685,33 +622,18 @@ class SiteIn(BaseModel):
 
 
 def _iter_site_dicts(nodes):
-    """폴더 안까지 포함해 모든 site 노드를 순회(아이콘 조회·정리용)."""
-    for n in nodes:
-        if isinstance(n, dict) and n.get("kind") == "folder":
-            yield from (n.get("items") or [])
-        elif isinstance(n, dict):
-            yield n
+    """infra/sites_store.iter_site_dicts 로 위임(동작 동일)."""
+    return _iter_dicts(nodes)
 
 
 def _safe_icon(name: str) -> str:
-    name = str(name or "")
-    return "" if ("/" in name or "\\" in name or ".." in name) else name
+    """infra/sites_store.safe_icon 로 위임(경로 탈출 아이콘명 거부)."""
+    return _safe_icon_impl(name)
 
 
 def _san_node(n: dict):
-    """클라이언트가 PUT으로 보낸 구조를 알려진 필드만 남겨 안전하게 정규화."""
-    if not isinstance(n, dict):
-        return None
-    nid = str(n.get("id") or "")[:32]
-    if not nid:
-        return None
-    if n.get("kind") == "folder":
-        items = [_san_node(x) for x in (n.get("items") or [])]
-        items = [x for x in items if x and x.get("kind") != "folder"]  # 폴더 중첩 금지(1단계)
-        return {"id": nid, "kind": "folder", "title": str(n.get("title") or "폴더")[:60], "items": items}
-    return {"id": nid, "kind": "site", "url": str(n.get("url") or "")[:2000],
-            "title": str(n.get("title") or "")[:120], "icon": _safe_icon(n.get("icon"))[:80],
-            "added_at": str(n.get("added_at") or "")}
+    """infra/sites_store.san_node 로 위임(클라이언트 입력 정규화)."""
+    return _san_impl(n)
 
 
 @app.get("/api/sites")
@@ -813,7 +735,8 @@ def site_icon(sid: str) -> FileResponse:
 
 
 def _find_site_node(sid: str, sites: list):
-    return next((x for x in _iter_site_dicts(sites) if x.get("id") == sid), None)
+    """infra/sites_store.find_site_node 로 위임(id로 노드 찾기)."""
+    return _find_node(sid, sites)
 
 
 def _set_icon_bytes(node: dict, data: bytes, mime: str, ext_hint: str = "") -> None:
