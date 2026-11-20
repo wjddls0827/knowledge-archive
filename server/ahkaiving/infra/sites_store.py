@@ -15,10 +15,10 @@ def iter_site_dicts(nodes):
             yield n
 
 
-def safe_icon(name: str) -> str:
-    """아이콘 파일명에서 경로 탈출 문자가 있으면 거부('')."""
-    name = str(name or "")
-    return "" if ("/" in name or "\\" in name or ".." in name) else name
+def safe_icon(name: object) -> str:
+    """아이콘 파일명에서 경로 탈출 문자가 있으면 거부(''). None·임의 입력도 안전하게 받는다."""
+    s = str(name or "")
+    return "" if ("/" in s or "\\" in s or ".." in s) else s
 
 
 def san_node(n: dict):

@@ -13,10 +13,8 @@ import shutil
 import ssl
 import subprocess
 import sys
-import tempfile
-import urllib.request
 from pathlib import Path
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 
 from fastapi import Body, FastAPI, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
