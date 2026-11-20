@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+server/.venv/
+
+# Secrets — never commit
+.env
+server/.env
+
+# 수집한 자료(원본 전문은 저작권 보호) — 로컬에만. 빈 골격만 추적
+server/data/archive/items/*
+!server/data/archive/items/.gitkeep
+server/data/archive/favicons/
+server/data/collect_inbox/*
+!server/data/collect_inbox/.gitkeep
+server/data/collect_beats/*
+!server/data/collect_beats/.gitkeep
+server/data/sites.json
+server/payload.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

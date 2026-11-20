@@ -1,0 +1,11 @@
+{
+  "url": "https://example.com/some-article",
+  "kind": "article",
+  "title": "예시 자료 제목",
+  "summary": "<p><b>한 줄 요약</b><br>이 자료가 무엇인지 한 문장.</p><p><b>핵심 포인트</b></p><ul><li>요점 1</li><li>요점 2</li></ul><p><b>왜 중요한가</b><br>함의 한 문장.</p>",
+  "tags": ["예시", "태그"],
+  "text": "추출한 본문 텍스트(선택). 마크다운 헤딩(#, ##)·불릿(- )으로 계층을 보존한다.",
+  "segments": [{ "o": "original paragraph", "k": "번역된 문단" }],
+  "deadline": "",
+  "provenance": "자동 수집 경위 메모(선택) — 예: 로그인 벽이라 링크만 보관."
+}

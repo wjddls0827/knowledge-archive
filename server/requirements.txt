@@ -1,0 +1,16 @@
+# 아!카이빙 백엔드 (server/ahkaiving) 실행 의존성.
+
+# --- 서버 구동 핵심 (이것만으로 서버·업로드·링크/파일 보관이 돈다) ---
+fastapi>=0.110
+uvicorn>=0.29
+pydantic>=2.6
+python-multipart>=0.0.9        # 업로드 폼(UploadFile) 파싱
+
+# --- 수집 품질 (없어도 서버는 뜨지만 기능이 조용히 degrade) ---
+certifi>=2024.2.2              # 아나콘다/윈도우에서 HTTPS 링크 수집 시 CA 미탐 문제 해결
+pymupdf>=1.24                  # PDF 본문 추출 + 제목 메타
+
+# --- 선택: 서버 자체 요약/번역 (/enrich, /translate) ---
+# 구조 B에서는 수집·번역·요약을 Claude Code(CLI)가 대행하므로 기본은 불필요.
+# 서버가 직접 Claude API를 호출하게 하려면 아래 주석을 풀고 ANTHROPIC_API_KEY 를 설정.
+# anthropic>=0.39
