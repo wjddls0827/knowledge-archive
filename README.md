@@ -7,6 +7,40 @@
 로컬에서 도는 단일 FastAPI 서버 + 단일 HTML 대시보드다. 데이터는 전부 네 컴퓨터의
 `server/data/archive/` 아래 파일로만 저장된다 — 외부 서버로 나가지 않는다.
 
+## 스크린샷
+
+| 갤러리 — 수집 목록 | 캘린더 — 채용공고는 마감일, 그 외는 수집일 |
+| :---: | :---: |
+| ![갤러리](docs/screenshots/gallery.jpg) | ![캘린더](docs/screenshots/calendar.jpg) |
+| **읽기 뷰 — 원문 캡처 + 요약·번역** | **리스트 — 분류·출처·상태·키워드** |
+| ![읽기 뷰](docs/screenshots/reader.jpg) | ![리스트](docs/screenshots/list.jpg) |
+
+## 동작 방식 (구조 B)
+
+웹은 *입구 + 뷰어*일 뿐, 수집·번역·요약의 지능은 **Claude Code CLI**가 대행한다.
+서버는 받아서 로컬 파일로 원자적으로 보관만 하고, 대시보드는 그걸 읽어 보여준다.
+
+```mermaid
+sequenceDiagram
+    actor U as 사용자
+    participant D as 대시보드
+    participant S as FastAPI 서버
+    participant C as Claude Code CLI 창
+    participant A as 아카이브(로컬 파일)
+
+    U->>D: 링크 붙여넣기 / 파일 업로드
+    D->>S: POST /api/collect
+    S->>C: 전용 수집 창 실행 (collect_runner → claude)
+    Note over C: 원문 수집 · 한국어 번역 · 요약·태그
+    C->>A: cli ingest — 원본 보존 + 요약 저장 (원자적)
+    U->>D: 자료 열람 (읽기 뷰어)
+    D->>S: GET /api/materials
+    S->>A: 읽기
+    A-->>U: 원문 + 요약 + 번역
+```
+
+> 수동 업로드·읽기·정리는 Claude Code 없이도 동작한다. 위 **자동 수집/번역/요약**만 `claude` CLI가 필요하다.
+
 ---
 
 ## ⚠️ 먼저 — 이게 돌아가려면 Claude Code CLI가 필요하다
