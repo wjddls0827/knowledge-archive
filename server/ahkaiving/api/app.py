@@ -170,6 +170,7 @@ class EditIn(BaseModel):
     segments: list[dict] | None = None     # 원문↔번역 문단 쌍 [{o, k}] (정렬 리더용)
     memos: list[dict] | None = None        # 사용자 메모 스레드(댓글식) [{id, html, created_at, updated_at?}]
     related: list[dict] | None = None      # 관련 자료 연결 [{id, rel, title}] — 같은 주제의 원 출처·2차 자료
+    starred: bool | None = None            # 중요 표시(사용자 신호) — 별표(★). 목록·캘린더·마감임박에서 강조·상단 정렬
 
 
 @app.patch("/api/materials/{item_id}")
@@ -227,6 +228,11 @@ def edit_material(item_id: str, body: EditIn) -> JSONResponse:
             {"id": str(r.get("id") or ""), "rel": str(r.get("rel") or "관련"), "title": str(r.get("title") or "")}
             for r in body.related if (r.get("id") or "").strip()
         ]
+    if body.starred is not None:
+        if body.starred:
+            item.extensions["starred"] = True
+        else:
+            item.extensions.pop("starred", None)
     # 요약이 채워지면(자동이든 직접이든) '분류·요약' 단계로 전진
     from ..domain.model import ItemStatus
     if (item.meta.summary or "").strip() and item.status in (ItemStatus.PRESERVED, ItemStatus.EXTRACTED):
